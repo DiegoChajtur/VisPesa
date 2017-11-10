@@ -1,6 +1,7 @@
 import threading 
 from time import sleep
 import Tkinter as tk
+import tkMessageBox
 import sys
 import glob
 import serial
@@ -51,14 +52,15 @@ y9ve+va3wA2ucIdL3OIa97e25ZlRmBbbb6FyYdCNrnSnS93qWve62M2udrfL3e5697vgDa94x0ve
 8pr3vOhNr3rXy972uve98I2vfOdL3/ra9774za9+98vf/vr3vwAOcE0CAgA7
 """	
 root = tk.Tk()
-portList = [None]
+portList = ["COM"]
 var = tk.StringVar(root)
 kg = 0;
+calibracion = 5.5
 items = tk.IntVar()
 items.set(0)
 closeSerial = False
 photo = tk.PhotoImage(data=photo)
-root.wm_geometry("248x205+60+60")
+root.wm_geometry("320x160+600+400")
 root.title("Visualizador")
 root.resizable(0,0)
 mycolor2 = '#E1E4E9'
@@ -94,8 +96,11 @@ def refresh():
 def openPort():
 	global ser
 	print "hay que abrir puerto ahora"
+	calibracion_text.set("calibrando...")
 	actualport = var.get()
 	print actualport
+	#refresh_but.grid(column=10,row=10)
+	#e.grid(column=3,row=0,pady=(0,70))
 	try:
 		ser = serial.Serial(
 		port = actualport,
@@ -103,12 +108,13 @@ def openPort():
 		bytesize = serial.EIGHTBITS, 
 		parity = serial.PARITY_NONE,
 		stopbits = serial.STOPBITS_ONE, 
-		timeout = 1,
+		timeout = 10,
 		xonxoff = False,
 		rtscts = False,
 		dsrdtr = False,
-		writeTimeout = 2
+		writeTimeout = 10
 		)
+		calibracion()
 		if(getReadings.isAlive() == False):
 			getReadings.start()
 	except Exception, e1:
@@ -118,6 +124,8 @@ def closePort():
 	global closeSerial
 	closeSerial = True
 	print "hay que cerrar puerto ahora"
+	refresh_but.grid(column=2,row=0,pady=(10,0))
+	#e.grid(column=12,row=12)
 	#ser.close()
 
 def changePort():
@@ -131,16 +139,12 @@ def changePort():
 
 
 def getReadings():
-	global kg,ser,closeSerial
+	global kg,ser,closeSerial,serial_in
 	while(True):
 		if(ser.isOpen()== True):
-			read = ser.readline(2000)
-			try:
-				read_int = int(read)
-				items.set(read_int)
-				#print read
-			except:
-				print "Read serial timeout"
+			serial_in = ser.readline()
+			print "RAW:",serial_in
+			string_to_float()
 			#
 			if(closeSerial == True):
 				closeSerial = False
@@ -149,17 +153,89 @@ def getReadings():
 		else:
 			refresh()
 			sleep(5)
-		
+
+def string_to_float():
+	try:
+		read_int = int(serial_in)
+		items.set(read_int)
+		#print read
+	except:
+		print "timeout..."
+
+def cali():
+	try:
+		#temp = float(e.get())
+		print temp
+		tkMessageBox.showinfo("Info", "Listo !")
+		calibracion = temp;
+	except ValueError:
+		print "Not a float"
+		#e.delete(0, 'end')
+		#e.insert(0, 0.0)
+		tkMessageBox.showerror("Error", "Debe ingresar un valor numerico de calibracion")
+
+def calibracion():
+	ser.setDTR(1)
+	sleep(1);
+	ser.setDTR(0)
+	tkMessageBox.showinfo("Inicio", "Confirme el punto cero [Deje la pesa vacia]\nPrecione ok para continuar");
+	tkMessageBox.showinfo("Inicio", "Tara lista...\nPrecione ok para continuar");
+	tkMessageBox.showinfo("Inicio", "Ahora se calibrara...\nPrecione ok para continuar");
+	if(ser.isOpen()== True):
+		while(True):
+			temp = ser.readline()
+			if(temp.find("C")== 0):
+				ser.write("C")
+				break;
+		tkMessageBox.showinfo("Inicio", "Ponga 40Kg para calibrar...\nPrecione ok para continuar");
+		while(True):
+			temp = ser.readline()
+			print temp
+			if(temp.find("P")== 0):
+				ser.write("P40000XX")
+				break;
+		tkMessageBox.showinfo("Inicio", "Calibracion lista!\nSaque el peso...\nPrecione ok para continuar");
+		while(True):
+			temp = ser.readline()
+			print temp
+			if(temp.find("O")== 0):
+				ser.write("O")
+				break;
+		calibracion_text.set("")
+		#ser.write("C")
+
+
+def help_func():
+	 tkMessageBox.showinfo("Ayuda", "Al inicio debe dejar la pesa vacia, luego se hace una calibracion con peso conocido de 40kg\nterminado esto la pesa esta lista para mostrar el peso");
+
+def rf_func():
+	print "refrescar puertos com"
 
 items.set(kg) #para cambiar valor
 portSelect = tk.OptionMenu(root, var, *portList)
 portSelect.grid(column=0,row=1,padx=(0,50),pady=(10,0))
 connect_but_text = tk.StringVar()
+calibracion_text = tk.StringVar()
+
 connect_but = tk.Button(root, textvariable=connect_but_text, command=changePort).grid(column=0,row=1,padx=(70,0),pady=(10,0))
+#cal_but = tk.Button(root, text="calibrar", command=cali).grid(column=3,row=0)
+#help_but = tk.Button(root, text="ayuda", command=help_func).grid(column=3,row=1,padx=(80,0),pady=(10,0))
+#refresh_but = tk.Button(root, text="Refrescar puertos", command=rf_func)
+#refresh_but.grid(column=2,row=0,pady=(10,0))
 value = tk.Label(root, textvariable=items,font=("ubuntu", 11),fg='#808182',bg='#eff0f4').grid(column=0,row=0,padx=(0,10),pady=(1,5))
+info_text = tk.Label(root, textvariable=calibracion_text,font=("ubuntu", 11),fg='#808182',bg='#eff0f4').grid(column=2,row=0,pady=(10,0))
+calibracion_text.set("Conecte la tarjeta\nexterna para comenzar\nla calibracion...")
+#e = tk.Entry(root)
+#e.grid(column=12,row=12)
+#e.delete(0, 'end')
+#e.insert(0, 0.0)
+
+tkMessageBox.showinfo("Info", "- Seleccione un puerto [COM] si es que esta disponible\n- Si no se muestra ninguno, asegurese de tener conectada la placa externa")
+
 #Refrescar todos los puertos al abrir
 refresh()
 getReadings = threading.Thread(target=getReadings)
+
 
 root.mainloop()
 
